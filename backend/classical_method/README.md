@@ -24,5 +24,6 @@ pip install -r requirements.txt --upgrade
 
 ### 1. Предобработка изображения
 
+Проверка работы git (я у себя всё сломал :(  )
 
 
