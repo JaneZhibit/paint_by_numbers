@@ -2,4 +2,6 @@
 Цель данного этапа подготовить изображение к алгоритмам квантования и сегментации
 '''
 
-from PIL import
+from PIL import Image
+
+img_path = 'test_images/'
