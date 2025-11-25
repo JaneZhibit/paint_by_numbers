@@ -46,6 +46,3 @@ def prepare_img(img_path, target_max_side=1000):
     print('-' * 20)
 
     return np.array(img)
-
-
-prepare_img(img_path='test_images/lake.webp')
