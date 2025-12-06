@@ -46,5 +46,5 @@ def quanting(img_np, colours_cnt=12):
 
 
 # Пример, как должен отработать код
-img_np = prepare_img(img_path='test_images/wolf.webp') # результат работы первого модуля
+img_np = prepare_img(img_path='test_images/wolf.webp')  # результат работы первого модуля
 quanting(img_np, colours_cnt=12)
