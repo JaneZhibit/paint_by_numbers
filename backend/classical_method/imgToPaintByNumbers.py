@@ -120,7 +120,6 @@ class ClassicalPaintByNumbers:
             print(f"Квантование завершено. Получено {colours_cnt} цветов.")
 
     def postprocessing(self):
-        # -этот модуль пока не работает!
         """Удаление мелких регионов на основе физического размера холста."""
         if self.quant_rgb is None:
             raise RuntimeError("Сначала выполните quantizing()")
@@ -128,7 +127,7 @@ class ClassicalPaintByNumbers:
         if self.config['logging']:
             print('-' * 20, "\nМодуль postprocessing\n", '-' * 20)
 
-        # --- Шаг 1: Рассчитываем минимальную площадь в пикселях (можно делать как угодно. Тут сделано так, как сделано)
+        # --- Шаг 1: Рассчитываем минимальную площадь в пикселях ---
         h, w = self.quant_rgb.shape[:2]
         canvas_w_mm = self.config['canvas_width_mm']
         canvas_h_mm = self.config['canvas_height_mm']
@@ -142,68 +141,101 @@ class ClassicalPaintByNumbers:
         # Минимальная площадь (круг диаметром min_diam_mm)
         min_radius_mm = min_diam_mm / 2.0
         min_area_mm2 = np.pi * (min_radius_mm ** 2)
+
         # Площадь одного пикселя в мм²
         pixel_area_mm2 = (1.0 / px_per_mm) ** 2
         min_region_pixels = math.ceil(min_area_mm2 / pixel_area_mm2)
         min_region_pixels = max(1, min_region_pixels)
 
         if self.config['logging']:
-            print(f"Минимальная закрашиваемая область: {min_area_mm2:.1f} мм² -> не менее {min_region_pixels} пикселей")
+            print(
+                f"Минимальная закрашиваемая область: "
+                f"{min_area_mm2:.1f} мм² -> не менее {min_region_pixels} пикселей"
+            )
 
-        # --- Шаг 2: Найдём связные компоненты ---
-        # Используем cluster_labels — там уже разные числа для разных цветов
-        num_components, components = cv2.connectedComponents(
-            self.cluster_labels.astype(np.uint8),
-            connectivity=4
-        )
+        # --- Шаг 2: Связные компоненты отдельно внутри каждого кластера ---
+        labels = self.cluster_labels  # (H, W), значения 0..K-1
+        num_clusters = int(self.cluster_centers_lab.shape[0])
 
-        print("components:", components.min(), components.max(), components.mean(), components.std())
-
-        from collections import Counter
-        comp_sizes = Counter(components.flatten())
-
-        # Сопоставим каждую компоненту с её кластером (цветом)
+        components = np.zeros((h, w), dtype=np.int32)
         comp_to_cluster = {}
-        h, w = components.shape
-        for y in range(h):
-            for x in range(w):
-                comp_id = components[y, x]
-                if comp_id not in comp_to_cluster:
-                    comp_to_cluster[comp_id] = self.cluster_labels[y, x]
+        current_comp_id = 1
 
-        # --- Шаг 3: Удалим мелкие компоненты ---
+        for cluster_id in range(num_clusters):
+            # Бинарная маска пикселей данного кластера
+            mask = (labels == cluster_id).astype(np.uint8)
+            if mask.sum() == 0:
+                continue
+
+            # Связные компоненты только внутри этого цвета
+            num_comp_k, comp_k = cv2.connectedComponents(mask, connectivity=4)
+            # comp_k: 0 – фон, 1..num_comp_k-1 – локальные компоненты
+
+            for local_id in range(1, num_comp_k):
+                components_mask = (comp_k == local_id)
+                if not np.any(components_mask):
+                    continue
+                components[components_mask] = current_comp_id
+                comp_to_cluster[current_comp_id] = cluster_id
+                current_comp_id += 1
+
+        # --- Шаг 3: Размеры компонент и удаление мелких ---
+        flat_comp = components.ravel()
+        comp_sizes = np.bincount(flat_comp)  # индекс = comp_id, значение = размер
+
+        if self.config['logging']:
+            num_components = (np.arange(comp_sizes.size)[comp_sizes > 0] != 0).sum()
+            print(f"Найдено компонент (цветовые регионы): {num_components}")
+
         output_components = components.copy()
         kernel = np.ones((3, 3), dtype=np.uint8)
 
-        for comp_id, size in comp_sizes.items():
-            if comp_id == 0 or size >= min_region_pixels:
-                continue
+        # Множество id мелких и крупных компонент
+        comp_ids = np.arange(comp_sizes.size)
+        small_mask = (comp_ids != 0) & (comp_sizes < min_region_pixels)
+        small_ids = comp_ids[small_mask]
+        big_mask = (comp_ids != 0) & (comp_sizes >= min_region_pixels)
+        big_ids = set(comp_ids[big_mask].tolist())
 
+        for comp_id in small_ids:
             # Маска мелкой компоненты
             mask = (components == comp_id)
+            if not np.any(mask):
+                continue
+
             # Расширяем, чтобы найти соседей
-            mask_dilated = cv2.dilate(mask.astype(np.uint8), kernel, iterations=1)
-            neighbors_mask = (mask_dilated - mask.astype(np.uint8)).astype(bool)
+            mask_uint8 = mask.astype(np.uint8)
+            mask_dilated = cv2.dilate(mask_uint8, kernel, iterations=1)
+            neighbors_mask = (mask_dilated - mask_uint8).astype(bool)
 
-            # Соседние компоненты (только крупные)
+            if not np.any(neighbors_mask):
+                continue
+
+            # Соседние компоненты (индексы)
             neighbor_ids = np.unique(output_components[neighbors_mask])
-            valid_neighbors = [
-                nid for nid in neighbor_ids
-                if nid != comp_id and nid != 0 and comp_sizes[nid] >= min_region_pixels
-            ]
 
+            # Только крупные и не фон
+            valid_neighbors = [
+                int(nid) for nid in neighbor_ids
+                if nid in big_ids and nid != comp_id
+            ]
             if not valid_neighbors:
                 continue
 
-            # Цвет мелкой компоненты в LAB
-            src_cluster = comp_to_cluster[comp_id]
+            # Цвет мелкой компоненты (LAB)
+            src_cluster = comp_to_cluster.get(int(comp_id), None)
+            if src_cluster is None:
+                continue
             src_color_lab = self.cluster_centers_lab[src_cluster]
 
-            # Найти соседа с минимальным расстоянием в LAB
+            # Находим соседа с минимальным расстоянием по LAB
             best_neighbor = None
             min_dist = float('inf')
+
             for nid in valid_neighbors:
-                dst_cluster = comp_to_cluster[nid]
+                dst_cluster = comp_to_cluster.get(int(nid), None)
+                if dst_cluster is None:
+                    continue
                 dst_color_lab = self.cluster_centers_lab[dst_cluster]
                 dist = np.linalg.norm(src_color_lab - dst_color_lab)
                 if dist < min_dist:
@@ -213,26 +245,31 @@ class ClassicalPaintByNumbers:
             if best_neighbor is not None:
                 output_components[mask] = best_neighbor
 
-        # --- Шаг 4: Восстановим RGB-изображение ---
+        # --- Шаг 4: Восстанавливаем RGB-изображение из компонент ---
         self.postprocessed_img = np.zeros_like(self.quant_rgb)
         self.final_colors = {}
 
-        for comp_id in np.unique(output_components):
+        unique_components = np.unique(output_components)
+        for comp_id in unique_components:
             if comp_id == 0:
                 continue
-            cluster_id = comp_to_cluster[comp_id]
-            # Получим цвет кластера
+
+            cluster_id = comp_to_cluster.get(int(comp_id), None)
+            if cluster_id is None:
+                continue
+
             color_lab = self.cluster_centers_lab[cluster_id].copy()
-            # Преобразуем в RGB (так же, как в quantizing)
-            L = (color_lab[0] * (255.0 / 100.0)).astype(np.uint8)
-            a = color_lab[1].astype(np.uint8)
-            b = color_lab[2].astype(np.uint8)
+
+            # LAB -> RGB (как в quantizing)
+            L = np.uint8(color_lab[0] * (255.0 / 100.0))
+            a = np.uint8(color_lab[1])
+            b = np.uint8(color_lab[2])
             lab_px = np.uint8([[[L, a, b]]])
             rgb_px = cv2.cvtColor(lab_px, cv2.COLOR_LAB2RGB)[0, 0]
-            self.final_colors[comp_id] = tuple(rgb_px)
-            self.postprocessed_inv = output_components == comp_id
+
+            self.final_colors[int(comp_id)] = tuple(rgb_px.tolist())
             self.postprocessed_img[output_components == comp_id] = rgb_px
 
         if self.config['logging']:
-            print(f"Постобработка завершена. Регионов до: {num_components - 1}, после: {len(self.final_colors)}")
-
+            num_components_after = len(self.final_colors)
+            print(f"Постобработка завершена. Регионов после: {num_components_after}")

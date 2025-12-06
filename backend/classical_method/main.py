@@ -11,7 +11,7 @@ config = {
     'target_max_side': 1000,
     'canvas_width_mm': 400,
     'canvas_height_mm': 300,
-    'min_diameter_mm': 5,
+    'min_diameter_mm': 3,
     'colours_cnt': 12,
     'logging': True
 }
@@ -23,7 +23,7 @@ generator.preprocessing()
 #show_image(generator.preprocessed_img, title="Изображение с изменённым размером (масштаб уменьшен)")
 
 generator.quantizing()
-#show_image(generator.quant_rgb, title="Изображение квантеризовано")
+show_image(generator.quant_rgb, title="Изображение квантеризовано")
 
 generator.postprocessing()
 show_image(generator.postprocessed_img, title='Постобработка')
