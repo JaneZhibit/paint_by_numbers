@@ -1,29 +1,54 @@
-"""
-Отсюда создание экземпляра класса и игра с ним
-"""
+from pipeline import ClassicalPaintByNumbers
+from utils.comparison import save_stages_comparison
 
-
-from utils.show_image import show_image
-from imgToPaintByNumbers import ClassicalPaintByNumbers
-
-config = {
+# --- Эксперимент 1: Классический метод (Сглаживание pyrMeanShift) ---
+config_v1 = {
     'img_path': 'test_images/wolf.webp',
     'target_max_side': 1000,
     'canvas_width_mm': 400,
     'canvas_height_mm': 300,
     'min_diameter_mm': 3,
-    'colours_cnt': 12,
-    'logging': True
+    'colours_cnt': 16,
+    'logging': False,
+    'algorithm': {
+        'preprocessing': {
+            'filter_type': 'pyrMeanShift', 
+            'pyrMeanShift': {'sp': 5, 'sr': 15}
+        }
+    }
 }
 
-generator = ClassicalPaintByNumbers(config)
-# сейчас вызываем модули отдельно, чтобы не забывать, откуда растут ноги
-# потом всё будет выполнено внутри классаодним вызовом
-generator.preprocessing()
-#show_image(generator.preprocessed_img, title="Изображение с изменённым размером (масштаб уменьшен)")
+config_v2 = {
+    'img_path': 'test_images/wolf.webp',
+    'target_max_side': 1000,
+    'canvas_width_mm': 400,
+    'canvas_height_mm': 300,
+    'min_diameter_mm': 3,
+    'colours_cnt': 16,
+    'logging': False,
+    'algorithm': {
+        'preprocessing': {
+            'filter_type': 'median'
+        }
+    }
+}
 
-generator.quantizing()
-show_image(generator.quant_rgb, title="Изображение квантеризовано")
+gen1 = ClassicalPaintByNumbers(config_v1)
+gen1.run_all()
+save_stages_comparison(
+    gen1, 
+    stages=["preprocessing", "postprocessing", "contours"], 
+    title="Опыт 1",
+    save_path="output/experiment_3.png"
+)
 
-generator.postprocessing()
-show_image(generator.postprocessed_img, title='Постобработка')
+gen2 = ClassicalPaintByNumbers(config_v2)
+gen2.run_all()
+save_stages_comparison(
+    gen2,
+    stages=["preprocessing", "postprocessing", "contours"],
+    title="Опыт 2",
+    save_path="output/experiment_4.png"
+)
+
+print("Все сравнения сохранены в папку 'output/'")
