@@ -28,9 +28,6 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config):
     if logging:
         print(f"Минимальная закрашиваемая область: {min_area_mm2:.1f} мм² -> не менее {min_region_pixels} пикселей")
 
-
-    labels = cluster_labels
-
     algo_params = config['algorithm']['postprocessing']
     clean_iters = algo_params['clean_iterations']
     morph_k = algo_params['morph_kernel_size']
@@ -54,7 +51,7 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config):
     current_comp_id = 1
 
     for cluster_id in range(num_clusters):
-        mask = (labels == cluster_id).astype(np.uint8)
+        mask = (cluster_labels == cluster_id).astype(np.uint8)
         if mask.sum() == 0: continue
 
         num_comp_k, comp_k = cv2.connectedComponents(mask, connectivity=connectivity)
@@ -114,6 +111,9 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config):
         if best_neighbor is not None:
             output_components[mask] = best_neighbor
 
+    # Пересчитываем comp_sizes после поглощения мелких компонент
+    comp_sizes = np.bincount(output_components.ravel())
+
     # --- Шаг 4: Восстанавливаем RGB ---
     postprocessed_img = np.zeros_like(quant_rgb)
     final_colors = {}
@@ -125,9 +125,11 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config):
         if cluster_id is None: continue
 
         color_lab = cluster_centers_lab[cluster_id].copy()
-        L = np.uint8(color_lab[0] * (255.0 / 100.0))
-        a = np.uint8(color_lab[1])
-        b = np.uint8(color_lab[2])
+        # L был нормализован в quantizing.py: умножен на (100/255)
+        # Возвращаем в cv2-диапазон (0–255)
+        L = np.clip(color_lab[0] * (255.0 / 100.0), 0, 255)
+        a = np.clip(color_lab[1], 0, 255)
+        b = np.clip(color_lab[2], 0, 255)
         lab_px = np.uint8([[[L, a, b]]])
         rgb_px = cv2.cvtColor(lab_px, cv2.COLOR_LAB2RGB)[0, 0]
 

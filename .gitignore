@@ -2,3 +2,4 @@
 .venv
 .idea
 .project_snapshots
+.output

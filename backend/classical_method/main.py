@@ -44,6 +44,7 @@ save_stages_comparison(
 )
 gen1.export_svg("output/experiment_1.svg")
 gen1.export_pdf("output/experiment_1.svg", "output/experiment_1.pdf")
+gen1.export_print("output/print_1.svg", "output/print_1.png")
 
 
 print("Все сравнения сохранены в папку 'output/'")

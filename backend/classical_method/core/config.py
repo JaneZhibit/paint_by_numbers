@@ -56,6 +56,10 @@ def validate_and_prepare_config(config):
     user_algo = config.get('algorithm', {})
 
     config['algorithm'] = update_dict_deep(default_algo, user_algo)
+    
+    # Подстановка параметра печати (верхний уровень конфига)
+    config.setdefault('print_dpi', 300)
+    
     return config
 
 

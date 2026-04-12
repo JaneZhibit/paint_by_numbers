@@ -4,7 +4,7 @@ from core.quantizing import quantize_image
 from core.postprocessing import postprocess_image
 from core.contours import generate_contours
 from core.numbering import add_numbers
-from core.export import export_svg, export_pdf
+from core.export import export_svg, export_pdf, export_print
 from core.layout import compute_label_layout
 from core.legend import generate_legend
 
@@ -42,7 +42,7 @@ class ClassicalPaintByNumbers:
         self.postprocessed_img, self.final_colors, self.cluster_labels, self.color_index_map, self.output_components, self.comp_to_cluster, self.comp_sizes = res
 
     def generate_contours(self):
-        self.contours_img = generate_contours(self.postprocessed_img, self.config)
+        self.contours_img = generate_contours(self.postprocessed_img, self.output_components, self.config)
         return self.contours_img
 
     def add_numbers(self):
@@ -77,8 +77,19 @@ class ClassicalPaintByNumbers:
     def export_pdf(self, svg_path: str, save_path: str):
         export_pdf(
             svg_path,
+            self.numbered_img,
             self.legend_img,
             save_path
+        )
+
+    def export_print(self, save_path_svg: str, save_path_png: str = None):
+        export_print(
+            self.output_components,
+            self.label_layout,
+            self.final_colors,
+            self.config,
+            save_path_svg,
+            save_path_png
         )
 
     def run_all(self):

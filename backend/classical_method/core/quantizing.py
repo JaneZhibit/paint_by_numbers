@@ -38,7 +38,10 @@ def quantize_image(preprocessed_img, config):
 
     # 3. Возврат в RGB
     if color_space == 'LAB':
+        # L был нормализован на (100/255), возвращаем в cv2-диапазон (0–255)
         quantized_converted[:, :, 0] *= (255.0 / 100.0)
+        # Clip для избежания переполнения при округлении
+        quantized_converted = np.clip(quantized_converted, 0, 255)
         quant_rgb = cv2.cvtColor(quantized_converted.astype(np.uint8), cv2.COLOR_LAB2RGB)
     else:
         quant_rgb = quantized_converted.astype(np.uint8)
