@@ -137,4 +137,20 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config):
     if logging:
         print(f"Постобработка завершена. Регионов после: {len(final_colors)}")
 
-    return postprocessed_img, final_colors, cluster_labels
+    # --- Шаг 5: Создаём color_index_map ---
+    # Собираем уникальные cluster_id из final_colors и сортируем по яркости (L в LAB)
+    unique_cluster_ids = set()
+    for comp_id in final_colors.keys():
+        cluster_id = comp_to_cluster.get(int(comp_id))
+        if cluster_id is not None:
+            unique_cluster_ids.add(cluster_id)
+    
+    # Сортируем по яркости (L канал) в порядке убывания (самый светлый первым)
+    sorted_clusters = sorted(unique_cluster_ids, 
+                            key=lambda cid: cluster_centers_lab[cid][0], 
+                            reverse=True)
+    
+    # Создаём маппинг: cluster_id → порядковый номер (начиная с 1)
+    color_index_map = {cluster_id: idx + 1 for idx, cluster_id in enumerate(sorted_clusters)}
+
+    return postprocessed_img, final_colors, cluster_labels, color_index_map, output_components, comp_to_cluster, comp_sizes

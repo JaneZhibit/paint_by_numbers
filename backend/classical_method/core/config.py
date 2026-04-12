@@ -23,6 +23,10 @@ def get_default_algo_config():
         'contours': {
             'line_thickness': 1,
             'line_color': (0, 0, 0)  # Черный цвет по умолчанию
+        },
+        'numbering': {
+            'min_number_area_px': 300,
+            'font_scale_factor': 0.08
         }
     }
 
