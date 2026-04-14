@@ -38,5 +38,29 @@ def preprocess_image(config):
 
     preprocessed_img = cv2.cvtColor(img_smooth, cv2.COLOR_BGR2RGB)
 
+    # ============================================================================
+    # ГЕНЕРАЦИЯ КАРТЫ ВНИМАНИЯ (SALIENCY MAP)
+    # ============================================================================
+    saliency_map_config = algo_params.get('saliency_map', {})
+    saliency_map_enabled = saliency_map_config.get('enabled', False)
+    
+    if saliency_map_enabled:
+        if logging: print("Генерация карты внимания (Saliency Map)...")
+        
+        try:
+            # Используем StaticSaliencyFineGrained для вычисления карты внимания
+            saliency = cv2.saliency.StaticSaliencyFineGrained_create()
+            _, saliency_map = saliency.computeSaliency(img_smooth)
+            
+            # Нормализуем карту в диапазон [0.0, 1.0]
+            saliency_map = saliency_map.astype(np.float32) / 255.0
+            
+            if logging: print(f"  Карта внимания создана, размер: {saliency_map.shape}")
+        except Exception as e:
+            if logging: print(f"  Ошибка при создании карты внимания: {e}")
+            saliency_map = None
+    else:
+        saliency_map = None
+
     if logging: print("Предобработка завершена.")
-    return original_img, preprocessed_img
+    return original_img, preprocessed_img, saliency_map

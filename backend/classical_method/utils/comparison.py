@@ -5,16 +5,13 @@ import os
 def save_stages_comparison(generator, stages, title="Сравнение этапов", save_path="comparison.png"):
     """
     Собирает указанные стадии пайплайна в одно изображение и сохраняет.
-    Доступные стадии: 'original', 'preprocessing', 'quantizing', 'postprocessing', 'contours', 'numbering', 'legend'
+    Доступные стадии: 'original', 'preprocessing', 'quantizing', 'postprocessing'
     """
     stage_mapping = {
         'original': (generator.original_img, "Исходник"),
         'preprocessing': (generator.preprocessed_img, "Сглаживание"),
         'quantizing': (generator.quant_rgb, "Квантование"),
-        'postprocessing': (generator.postprocessed_img, "Постобработка"),
-        'contours': (generator.contours_img, "Контуры"),
-        'numbering': (generator.numbered_img, "Картина по номерам"),
-        'legend': (generator.legend_img, "Легенда")
+        'postprocessing': (generator.postprocessed_img, "Постобработка")
     }
 
     images_to_plot = []
