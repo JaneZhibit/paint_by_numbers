@@ -20,6 +20,13 @@ def preprocess_image(config):
     img_scaled = original_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     img_bgr = cv2.cvtColor(np.array(img_scaled), cv2.COLOR_RGB2BGR)
 
+    # Применение линейного контраста (помогает выделить контуры губ/глаз)
+    contrast_factor = algo_params.get('contrast', 1.0)
+    if contrast_factor != 1.0:
+        if logging: print(f"Применение контраста: x{contrast_factor}")
+        # alpha=contrast (масштабирование), beta=0 (без сдвига яркости)
+        img_bgr = cv2.convertScaleAbs(img_bgr, alpha=contrast_factor, beta=0)
+
     # Выбор алгоритма сглаживания
     filter_type = algo_params['filter_type']
     if logging: print(f"Применение фильтра: {filter_type}...")

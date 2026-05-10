@@ -5,9 +5,11 @@ import traceback
 from io import BytesIO, StringIO
 from PIL import Image
 import streamlit as st
+from streamlit_cropper import st_cropper
 import numpy as np
 import contextlib
 import json
+import cv2
 
 # Добавляем путь к backend
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend', 'classical_method'))
@@ -102,7 +104,9 @@ def build_config_from_session():
 
 
 def pil_to_bytes(pil_image):
-    """Конвертирует PIL Image в PNG bytes."""
+    """Конвертирует PIL Image в PNG bytes. Возвращает None, если изображение None."""
+    if pil_image is None:
+        return None
     buffer = BytesIO()
     pil_image.save(buffer, format="PNG")
     return buffer.getvalue()
@@ -302,68 +306,37 @@ sections = get_all_sections()
 for section in sections:
     params = get_params_by_section(section)
     
-    with st.sidebar.expander(section, expanded=False):
+    with st.sidebar.expander(f"📁 {section}", expanded=False):
         for param in params:
             param_path = param['param_path']
             label = param['label']
             param_type = param['type']
-            current_value = st.session_state.get(param_path, param['default'])
             
-            # Проверяем зависимости параметра
+            # Логика скрытия: проверяем зависимость напрямую из st.session_state
+            is_visible = True
             if 'depends_on' in param:
                 depends_on = param['depends_on']
-                parent_path = depends_on['path']
-                parent_value = st.session_state.get(parent_path, param.get('default'))
+                parent_val = st.session_state.get(depends_on['path'])
                 
-                # Проверяем, совпадает ли текущее значение родителя с требуемым
-                if 'value' in depends_on:
-                    required_value = depends_on['value']
-                    if parent_value != required_value:
-                        continue
-                elif 'values' in depends_on:
-                    required_values = depends_on['values']
-                    if parent_value not in required_values:
-                        continue
+                if 'value' in depends_on and parent_val != depends_on['value']:
+                    is_visible = False
+                elif 'values' in depends_on and parent_val not in depends_on['values']:
+                    is_visible = False
             
-            # Получаем справку для параметра
+            if not is_visible:
+                continue
+                
+            # Отрисовка виджета
             help_text = HELP_TEXTS.get(param['help_key'], "") if param['help_key'] else ""
             
-            # Создаём виджет в зависимости от типа
             if param_type == 'bool':
                 st.checkbox(label, key=param_path, help=help_text)
-            
             elif param_type == 'int':
-                st.slider(
-                    label,
-                    min_value=param['min'],
-                    max_value=param['max'],
-                    step=param['step'],
-                    key=param_path,
-                    help=help_text
-                )
-            
+                st.slider(label, min_value=param['min'], max_value=param['max'], step=param['step'], key=param_path, help=help_text)
             elif param_type == 'float':
-                st.slider(
-                    label,
-                    min_value=param['min'],
-                    max_value=param['max'],
-                    step=param['step'],
-                    key=param_path,
-                    help=help_text
-                )
-            
+                st.slider(label, min_value=param['min'], max_value=param['max'], step=param['step'], key=param_path, help=help_text)
             elif param_type == 'select':
-                st.selectbox(
-                    label,
-                    options=param['options'],
-                    key=param_path,
-                    help=help_text
-                )
-            
-            # Показываем справку, если есть
-            if param['help_key']:
-                with st.expander("ℹ️ Справка", expanded=False):
-                    st.markdown(HELP_TEXTS.get(param['help_key'], ""))
+                st.selectbox(label, options=param['options'], key=param_path, help=help_text)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("## 💾 Управление кэшем")
@@ -399,9 +372,61 @@ with tab_generate:
     
     with col_preview:
         if uploaded_file:
-            st.markdown("### 👁️ Превью")
+            st.markdown("### 👁️ Исходник")
             image = Image.open(uploaded_file)
-            st.image(image, use_container_width=True)
+            aspect_ratio = (canvas_width_mm, canvas_height_mm)
+            cropped_image = st_cropper(image, aspect_ratio=aspect_ratio, box_color='#FF0000', return_type='image')
+            
+            st.markdown("---")
+            st.markdown("### ⚡ Быстрый предпросмотр фильтров")
+            live_preview = st.toggle("Включить Live-превью (быстро, в низком разрешении)", value=False, help="Мгновенно показывает результат сглаживания и карту внимания при изменении параметров слева.")
+            
+            if live_preview:
+                with st.spinner("Обновление превью..."):
+                    # Сохраняем во временный файл
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                        cropped_image.save(tmp_file, format="PNG")
+                        tmp_path = tmp_file.name
+                    
+                    # Собираем конфиг, но принудительно ставим маленький размер для скорости
+                    preview_config = build_config_from_session()
+                    fast_config = {
+                        'img_path': tmp_path,
+                        'target_max_side': 500,  # Маленький размер для мгновенного рендера!
+                        'logging': False,
+                        'algorithm': preview_config
+                    }
+                    
+                    try:
+                        from core.preprocessing import preprocess_image
+                        _, prep_img, sal_map = preprocess_image(fast_config)
+                        
+                        # Выводим в две колонки
+                        prev_col1, prev_col2 = st.columns(2)
+                        with prev_col1:
+                            st.image(prep_img, caption="Сглаживание (500px)", use_container_width=True)
+                        
+                        with prev_col2:
+                            if sal_map is not None:
+                                smap_norm = cv2.normalize(sal_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                                hm = cv2.applyColorMap(smap_norm, cv2.COLORMAP_JET)
+                                st.image(cv2.cvtColor(hm, cv2.COLOR_BGR2RGB), caption="Карта внимания", use_container_width=True)
+                            else:
+                                st.info("Карта внимания отключена")
+                                
+                    except Exception as e:
+                        st.error(f"Ошибка превью: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Управление процессом генерации
+    st.markdown("### ⚙️ Управление процессом")
+    execution_stage = st.radio(
+        "Генерировать до этапа:",
+        options=["Только сглаживание", "Сглаживание + Квантование", "Полный цикл (с постобработкой)", "Полный цикл + Контуры"],
+        index=3,
+        help="Останови генерацию раньше, чтобы быстро проверить настройки фильтров или палитры."
+    )
     
     st.markdown("---")
     
@@ -414,7 +439,7 @@ with tab_generate:
                 with st.spinner("⏳ Генерирую..."):
                     # Сохраняем загруженный файл во временный файл
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
-                        tmp_file.write(uploaded_file.getbuffer())
+                        cropped_image.save(tmp_file, format="PNG")
                         tmp_path = tmp_file.name
                     
                     # Собираем конфиг из session_state
@@ -438,7 +463,17 @@ with tab_generate:
                     # Перехватываем вывод (логи)
                     log_capture = StringIO()
                     with contextlib.redirect_stdout(log_capture):
-                        gen.run_all()
+                        # Выполняем этапы пошагово в зависимости от выбора
+                        gen.preprocessing()
+                        
+                        if execution_stage in ["Сглаживание + Квантование", "Полный цикл (с постобработкой)", "Полный цикл + Контуры"]:
+                            gen.quantizing()
+                            
+                        if execution_stage in ["Полный цикл (с постобработкой)", "Полный цикл + Контуры"]:
+                            gen.postprocessing()
+                        
+                        if execution_stage == "Полный цикл + Контуры":
+                            gen.vectorization()
                     
                     # Получаем перехваченные логи
                     logs = log_capture.getvalue()
@@ -447,20 +482,25 @@ with tab_generate:
                     st.session_state['generation_result'] = {
                         'original': gen.original_img,
                         'preprocessed': gen.preprocessed_img,
+                        'saliency_map': gen.saliency_map,
                         'quantized': gen.quant_rgb,
                         'postprocessed': gen.postprocessed_img,
                         'final_colors': gen.final_colors,
+                        'borders_mask': gen.borders_mask,
                         'timings': gen.timings if hasattr(gen, 'timings') else None,
-                        'logs': logs
+                        'logs': logs,
+                        'execution_stage': execution_stage,
+                        'complexity_metrics': gen.complexity_metrics
                     }
                     
-                    # Добавляем в историю обработок
-                    history_manager.add_entry(
-                        config,
-                        st.session_state['generation_result']['postprocessed'],
-                        st.session_state['generation_result'].get('timings'),
-                        st.session_state.get('active_preset', 'Пользовательские')
-                    )
+                    # Добавляем в историю обработок (только если есть результат постобработки)
+                    if st.session_state['generation_result'].get('postprocessed') is not None:
+                        history_manager.add_entry(
+                            config,
+                            st.session_state['generation_result']['postprocessed'],
+                            st.session_state['generation_result'].get('timings'),
+                            st.session_state.get('active_preset', 'Пользовательские')
+                        )
                     
                     st.success("✅ Генерация завершена!")
                     
@@ -486,16 +526,39 @@ with tab_generate:
         with col2:
             st.markdown("#### 2️⃣ Сглаживание")
             st.image(result['preprocessed'], use_container_width=True)
+            
+            # Визуализация Saliency Map, если она есть
+            if result.get('saliency_map') is not None:
+                st.markdown("🔥 **Тепловая карта внимания**")
+                # Автоматически растягиваем контраст: самый темный пиксель станет 0 (синим), самый светлый 255 (красным)
+                smap_norm = cv2.normalize(result['saliency_map'], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                heatmap = cv2.applyColorMap(smap_norm, cv2.COLORMAP_JET)
+                heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+                st.image(heatmap_rgb, use_container_width=True, caption="Красный - фокус, Синий - фон")
         
         col3, col4 = st.columns(2)
         
         with col3:
-            st.markdown("#### 3️⃣ Квантование")
-            st.image(result['quantized'], use_container_width=True)
+            if result.get('quantized') is not None:
+                st.markdown("#### 3️⃣ Квантование")
+                st.image(result['quantized'], use_container_width=True)
+            else:
+                st.info("ℹ️ Этап квантования был пропущен.")
         
         with col4:
-            st.markdown("#### 4️⃣ Результат")
-            st.image(result['postprocessed'], use_container_width=True)
+            if result.get('postprocessed') is not None:
+                st.markdown("#### 4️⃣ Результат")
+                st.image(result['postprocessed'], use_container_width=True)
+            else:
+                st.info("ℹ️ Этап постобработки был пропущен.")
+        
+        # Превью контуров (если этап векторизации был выполнен)
+        if result.get('borders_mask') is not None:
+            st.markdown("---")
+            st.markdown("### ✏️ Контуры (векторизация)")
+            # Инвертируем маску: чёрные линии на белом фоне
+            inverted = 255 - result['borders_mask']
+            st.image(inverted, use_container_width=True, caption="Чёрные линии — границы секторов")
         
         # Вывод таймингов
         st.markdown("---")
@@ -516,6 +579,35 @@ with tab_generate:
             # Общее время
             st.metric("Общее время", f"{total_time:.2f}s")
         
+        # Вывод метрик сложности
+        if result.get('complexity_metrics'):
+            metrics = result['complexity_metrics']
+            st.markdown("---")
+            st.subheader("📊 Анализ сложности закрашивания")
+            
+            # Общий индекс сложности
+            st.metric("Индекс сложности", f"{metrics['complexity_score']:.1f}", help="Чем выше, тем сложнее. Зависит от количества мелких деталей, узких мест и изрезанности границ.")
+            
+            # Колонки для размеров пятен
+            st.markdown("#### Размеры пятен")
+            col_s, col_m, col_l = st.columns(3)
+            with col_s:
+                st.metric("Мелкие", f"{metrics['count_small']} шт", f"{metrics['pct_small']:.1f}% площади")
+            with col_m:
+                st.metric("Средние", f"{metrics['count_medium']} шт", f"{metrics['pct_medium']:.1f}% площади")
+            with col_l:
+                st.metric("Крупные", f"{metrics['count_large']} шт", f"{metrics['pct_large']:.1f}% площади")
+                
+            # Колонки для проблемных мест и формы
+            st.markdown("#### Проблемные места и форма")
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                st.metric("Непрокрашиваемые", f"{metrics['pct_unpaintable_max']:.1f}%", help="Площадь пятен, в которые кисть вообще не пролезет (max_dt < brush_radius)")
+            with col_p2:
+                st.metric("Узкие / Хвостатые", f"{metrics['pct_unpaintable_median']:.1f}%", help="Площадь пятен, где кисть не пролезет в большей части пятна (median_dt < brush_radius)")
+            with col_p3:
+                st.metric("Изрезанность", f"{metrics['border_density']:.3f}", help="Отношение длины всех границ к общей площади. Чем выше, тем более «рваные» края у пятен.")
+        
         # Вывод логов
         if result.get('logs'):
             st.markdown("---")
@@ -524,17 +616,21 @@ with tab_generate:
         
         # Кнопка скачивания
         st.markdown("---")
-        postprocessed_img = result['postprocessed']
-        if isinstance(postprocessed_img, np.ndarray):
-            postprocessed_img = Image.fromarray(postprocessed_img)
-        result_png = pil_to_bytes(postprocessed_img)
-        st.download_button(
-            label="💾 Скачать результат (PNG)",
-            data=result_png,
-            file_name="paint_by_numbers_result.png",
-            mime="image/png",
-            use_container_width=True
-        )
+        if result.get('postprocessed') is not None:
+            postprocessed_img = result['postprocessed']
+            if isinstance(postprocessed_img, np.ndarray):
+                postprocessed_img = Image.fromarray(postprocessed_img)
+            result_png = pil_to_bytes(postprocessed_img)
+            if result_png is not None:
+                st.download_button(
+                    label="💾 Скачать результат (PNG)",
+                    data=result_png,
+                    file_name="paint_by_numbers_result.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+        else:
+            st.info("ℹ️ Результат постобработки недоступен. Выполните полный цикл генерации.")
 
 
 # ============================================================================

@@ -3,6 +3,7 @@ def get_default_algo_config():
     return {
         'preprocessing': {
             'filter_type': 'pyrMeanShift',  # Варианты: 'pyrMeanShift', 'median', 'bilateral', 'none'
+            'contrast': 1.0,
             'pyrMeanShift': {'sp': 5, 'sr': 15},
             'median': {'kernel_size': 3},
             'bilateral': {'d': 9, 'sigmaColor': 75, 'sigmaSpace': 75},
@@ -32,7 +33,8 @@ def get_default_algo_config():
                 'k_min': 10,
                 'k_max': 26,
                 'k_step': 2,
-                'subsample_ratio': 0.2
+                'subsample_ratio': 0.2,
+                'stop_threshold_percent': 5.0
             },
             'hierarchical_split': {'enabled': False, 'min_area_pixels': 2000, 'variance_threshold': 30.0}
         },
@@ -42,6 +44,15 @@ def get_default_algo_config():
             'connectivity': 8,
             'contrast_threshold': 100.0,
             'grow_details': {'enabled': False, 'max_dilation_steps': 5}
+        },
+        'vectorization': {
+            'method': 'raster_shift',
+            'smoothing': {
+                'enabled': True,
+                'method': 'approx_poly_dp',
+                'approx_poly_dp': {'epsilon_factor': 0.005},
+                'chaikin': {'iterations': 2}
+            }
         }
     }
 
@@ -59,6 +70,17 @@ UI_PARAMS_META = [
         "options": ["pyrMeanShift", "bilateral", "median", "none"],
         "default": "pyrMeanShift",
         "help_key": "filter_type",
+        "section": "Предобработка"
+    },
+    {
+        "param_path": "preprocessing.contrast",
+        "label": "Усиление контраста (x)",
+        "type": "float",
+        "min": 1.0,
+        "max": 2.0,
+        "step": 0.1,
+        "default": 1.0,
+        "help_key": None,
         "section": "Предобработка"
     },
     {
@@ -191,7 +213,8 @@ UI_PARAMS_META = [
         "type": "bool",
         "default": True,
         "help_key": "weighted_kmeans",
-        "section": "Квантование"
+        "section": "Квантование",
+        "depends_on": {"path": "quantizing.palette_method", "value": "kmeans"}
     },
     {
         "param_path": "quantizing.weighted_kmeans.edge_threshold1",
@@ -286,12 +309,25 @@ UI_PARAMS_META = [
         "depends_on": {"path": "quantizing.auto_color.enabled", "value": True}
     },
     {
+        "param_path": "quantizing.auto_color.stop_threshold_percent",
+        "label": "Авто-цвет: порог остановки (%)",
+        "type": "float",
+        "min": 1.0,
+        "max": 15.0,
+        "step": 1.0,
+        "default": 5.0,
+        "help_key": None,
+        "section": "Квантование / Авто-цвет",
+        "depends_on": {"path": "quantizing.auto_color.enabled", "value": True}
+    },
+    {
         "param_path": "quantizing.hierarchical_split.enabled",
         "label": "Иерархическое расщепление",
         "type": "bool",
         "default": False,
         "help_key": "hierarchical_split",
-        "section": "Квантование / Доп."
+        "section": "Квантование / Доп.",
+        "depends_on": {"path": "quantizing.palette_method", "value": "kmeans"}
     },
     {
         "param_path": "quantizing.hierarchical_split.min_area_pixels",
@@ -371,6 +407,60 @@ UI_PARAMS_META = [
         "help_key": None,
         "section": "Постобработка",
         "depends_on": {"path": "postprocessing.grow_details.enabled", "value": True}
+    },
+
+    # Векторизация / Контуры
+    {
+        "param_path": "vectorization.method",
+        "label": "Метод векторизации",
+        "type": "select",
+        "options": ["raster_shift", "contours"],
+        "default": "raster_shift",
+        "help_key": None,
+        "section": "Векторизация / Контуры"
+    },
+    {
+        "param_path": "vectorization.smoothing.enabled",
+        "label": "Сглаживание контуров",
+        "type": "bool",
+        "default": True,
+        "help_key": None,
+        "section": "Векторизация / Контуры",
+        "depends_on": {"path": "vectorization.method", "value": "contours"}
+    },
+    {
+        "param_path": "vectorization.smoothing.method",
+        "label": "Метод сглаживания контуров",
+        "type": "select",
+        "options": ["approx_poly_dp", "chaikin"],
+        "default": "approx_poly_dp",
+        "help_key": None,
+        "section": "Векторизация / Контуры",
+        "depends_on": {"path": "vectorization.smoothing.enabled", "value": True}
+    },
+    {
+        "param_path": "vectorization.smoothing.approx_poly_dp.epsilon_factor",
+        "label": "Douglas-Peucker: epsilon factor",
+        "type": "float",
+        "min": 0.001,
+        "max": 0.02,
+        "step": 0.001,
+        "default": 0.005,
+        "help_key": None,
+        "section": "Векторизация / Контуры",
+        "depends_on": {"path": "vectorization.smoothing.method", "value": "approx_poly_dp"}
+    },
+    {
+        "param_path": "vectorization.smoothing.chaikin.iterations",
+        "label": "Chaikin: итерации скругления",
+        "type": "int",
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "default": 2,
+        "help_key": None,
+        "section": "Векторизация / Контуры",
+        "depends_on": {"path": "vectorization.smoothing.method", "value": "chaikin"}
     },
 ]
 

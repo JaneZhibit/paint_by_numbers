@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 # Устанавливаем Python-зависимости
-RUN pip install --no-cache-dir -r frontend/requirements.txt
+RUN pip install -r frontend/requirements.txt
 
 EXPOSE 8501
 

@@ -4,15 +4,16 @@ import cv2
 
 def find_optimal_k(preprocessed_img, config):
     """
-    Находит оптимальное количество цветов (K) для K-Means используя метод "Локтя" (Elbow method).
+    Находит оптимальное количество цветов (K) для K-Means используя анализ относительного падения WCSS.
     
     Алгоритм:
     1. Уменьшает изображение пропорционально subsample_ratio для быстрого расчета
     2. Переводит в LAB цветовое пространство
     3. Запускает K-Means для разных значений K (от k_min до k_max с шагом k_step)
     4. Вычисляет WCSS (Within-Cluster Sum of Squares) для каждого K
-    5. Находит "локоть" кривой WCSS - точку максимального отклонения от линии
-    6. Возвращает оптимальное значение K
+    5. Анализирует относительное падение WCSS: на сколько процентов улучшается результат при добавлении нового цвета
+    6. Останавливается, когда улучшение становится меньше 5% от начальной дисперсии
+    7. Возвращает оптимальное значение K (не зависит от k_min, только от качества улучшений)
     """
     logging = config['logging']
     auto_color_config = config['algorithm']['quantizing']['auto_color']
@@ -68,7 +69,8 @@ def find_optimal_k(preprocessed_img, config):
             print(f"  K={k}: WCSS={wcss:.2e}")
     
     # 5. Находим "локоть" кривой WCSS
-    optimal_k = _find_elbow(k_values, wcss_values, logging)
+    threshold_percent = auto_color_config.get('stop_threshold_percent', 5.0)
+    optimal_k = _find_elbow(k_values, wcss_values, threshold_percent, logging)
     
     if logging:
         print(f"Оптимальное K найдено: {optimal_k}")
@@ -77,55 +79,40 @@ def find_optimal_k(preprocessed_img, config):
     return optimal_k
 
 
-def _find_elbow(k_values, wcss_values, logging=False):
+def _find_elbow(k_values, wcss_values, threshold_percent=5.0, logging=False):
     """
-    Находит "локоть" (elbow point) на кривой WCSS.
-    
-    Алгоритм:
-    1. Строит вектор от первой точки кривой к последней
-    2. Для каждой точки на кривой вычисляет расстояние до этой линии
-    3. Возвращает K, соответствующий точке с максимальным расстоянием
+    Находит оптимальное K на основе относительного падения WCSS.
+    Алгоритм смотрит, на сколько процентов уменьшается ошибка при добавлении новых цветов.
+    Если добавление цвета улучшает результат менее чем на заданный порог (например, 5%),
+    мы считаем, что достигли оптимального количества.
     """
     k_values = np.array(k_values)
     wcss_values = np.array(wcss_values)
     
-    # Координаты первой и последней точки
-    p1 = np.array([k_values[0], wcss_values[0]])
-    p2 = np.array([k_values[-1], wcss_values[-1]])
+    # Порог остановки: если улучшение меньше заданного процента от общей дисперсии
+    threshold = threshold_percent / 100.0
     
-    # Вектор от p1 к p2
-    line_vec = p2 - p1
-    line_len = np.linalg.norm(line_vec)
+    # Нормализуем WCSS, чтобы падение считалось в процентах от начального (худшего) состояния
+    max_wcss = wcss_values[0]
     
-    # Нормализуем вектор
-    line_unitvec = line_vec / line_len
+    optimal_idx = len(k_values) - 1  # По умолчанию берем максимальное K
     
-    # Для каждой точки на кривой вычисляем расстояние до линии
-    max_distance = 0
-    elbow_idx = 0
-    
-    for i, (k, wcss) in enumerate(zip(k_values, wcss_values)):
-        point = np.array([k, wcss])
+    for i in range(1, len(k_values)):
+        # Считаем, на сколько упал WCSS по сравнению с предыдущим шагом
+        drop = wcss_values[i-1] - wcss_values[i]
+        relative_drop = drop / max_wcss
         
-        # Вектор от p1 к текущей точке
-        point_vec = point - p1
-        
-        # Проекция point_vec на line_unitvec
-        proj_length = np.dot(point_vec, line_unitvec)
-        
-        # Точка на линии, ближайшая к текущей точке
-        proj_point = p1 + proj_length * line_unitvec
-        
-        # Расстояние от точки до линии
-        distance = np.linalg.norm(point - proj_point)
-        
-        if distance > max_distance:
-            max_distance = distance
-            elbow_idx = i
-    
-    optimal_k = k_values[elbow_idx]
+        if logging:
+            print(f"    Шаг K={k_values[i-1]} -> {k_values[i]}: улучшение на {relative_drop*100:.1f}%")
+            
+        # Если падение ошибки меньше порога, значит цвета больше не дают значимого эффекта
+        if relative_drop < threshold:
+            optimal_idx = i - 1  # Берем предыдущее K, до того как улучшения стали мизерными
+            break
+            
+    optimal_k = k_values[optimal_idx]
     
     if logging:
-        print(f"Elbow point найден на индексе {elbow_idx}, расстояние от линии: {max_distance:.2e}")
+        print(f"Elbow point (по падению < {threshold*100}%) найден на K={optimal_k}")
     
     return int(optimal_k)

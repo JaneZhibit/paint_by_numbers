@@ -225,6 +225,7 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config, sa
     # --- Шаг 4: Восстанавливаем RGB ---
     postprocessed_img = np.zeros_like(quant_rgb)
     final_colors = {}
+    final_cluster_labels = np.zeros_like(cluster_labels)
 
     unique_components = np.unique(output_components)
     for comp_id in unique_components:
@@ -233,6 +234,8 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config, sa
         cluster_id = comp_to_cluster.get(int(comp_id))
         if cluster_id is None:
             continue
+
+        final_cluster_labels[output_components == comp_id] = cluster_id
 
         color_lab = cluster_centers_lab[cluster_id].copy()
         # L был нормализован в quantizing.py: умножен на (100/255)
@@ -265,4 +268,4 @@ def postprocess_image(quant_rgb, cluster_labels, cluster_centers_lab, config, sa
     # Создаём маппинг: cluster_id → порядковый номер (начиная с 1)
     color_index_map = {cluster_id: idx + 1 for idx, cluster_id in enumerate(sorted_clusters)}
 
-    return postprocessed_img, final_colors, cluster_labels
+    return postprocessed_img, final_colors, final_cluster_labels

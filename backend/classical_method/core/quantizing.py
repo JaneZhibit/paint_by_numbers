@@ -387,7 +387,10 @@ def quantize_image(preprocessed_img, config):
                     
                     # Преобразуем пиксели в нужное цветовое пространство
                     if color_space == 'LAB':
-                        comp_img_converted = cv2.cvtColor(comp_pixels.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+                        # comp_pixels имеет shape (N, 3), нужно переформатировать для cv2.cvtColor
+                        comp_pixels_reshaped = comp_pixels.astype(np.uint8).reshape(1, -1, 3)
+                        comp_img_converted = cv2.cvtColor(comp_pixels_reshaped, cv2.COLOR_RGB2LAB).astype(np.float32)
+                        comp_img_converted = comp_img_converted.reshape(-1, 3)
                         comp_img_converted[:, 0] *= (100.0 / 255.0)
                     else:
                         comp_img_converted = comp_pixels.astype(np.float32)

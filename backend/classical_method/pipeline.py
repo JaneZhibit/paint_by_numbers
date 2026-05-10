@@ -7,7 +7,9 @@ from core.config import validate_and_prepare_config
 from core.preprocessing import preprocess_image
 from core.quantizing import quantize_image
 from core.postprocessing import postprocess_image
+from core.vectorization import vectorize_image
 from core.auto_color import find_optimal_k
+from core.metrics import calculate_complexity
 from utils.timer import time_stage, print_timing_report
 
 # Инициализируем глобальный кэш (лимит 1 ГБ)
@@ -29,12 +31,16 @@ class ClassicalPaintByNumbers:
         self.cluster_labels = None
         self.postprocessed_img = None
         self.final_colors = None
+        self.borders_mask = None
+        self.svg_paths = None
+        self.complexity_metrics = None
         self.timings = {}
         
         # Хеши для кэширования этапов
         self.preprocessing_hash = None
         self.quantizing_hash = None
         self.postprocessing_hash = None
+        self.vectorization_hash = None
 
     def _get_hash(self, data_dict):
         """Генерирует хеш для данных кэширования."""
@@ -64,6 +70,14 @@ class ClassicalPaintByNumbers:
         data = {
             'quantizing_hash': self.quantizing_hash,
             'postprocessing': self.config['algorithm']['postprocessing']
+        }
+        return self._get_hash(data)
+    
+    def _get_vectorization_hash(self):
+        """Хеш для этапа vectorization."""
+        data = {
+            'postprocessing_hash': self.postprocessing_hash,
+            'vectorization': self.config['algorithm']['vectorization']
         }
         return self._get_hash(data)
 
@@ -115,17 +129,41 @@ class ClassicalPaintByNumbers:
         # Проверяем кэш
         if self.postprocessing_hash in cache:
             print(f"✓ Использован кэш для этапа postprocessing")
-            self.postprocessed_img, self.final_colors, self.cluster_labels = cache[self.postprocessing_hash]
+            self.postprocessed_img, self.final_colors, self.cluster_labels, self.complexity_metrics = cache[self.postprocessing_hash]
         else:
             # Выполняем вычисления
             res = postprocess_image(self.quant_rgb, self.cluster_labels, self.cluster_centers, self.config, self.saliency_map)
             self.postprocessed_img, self.final_colors, self.cluster_labels = res
+            
+            # Вычисляем метрики сложности
+            self.complexity_metrics = calculate_complexity(self.cluster_labels, self.config)
+            if self.config.get('logging'):
+                print(f"Метрики сложности: {self.complexity_metrics}")
+                
             # Сохраняем в кэш
-            cache[self.postprocessing_hash] = (self.postprocessed_img, self.final_colors, self.cluster_labels)
+            cache[self.postprocessing_hash] = (self.postprocessed_img, self.final_colors, self.cluster_labels, self.complexity_metrics)
+
+    @time_stage("vectorization")
+    def vectorization(self):
+        # Вычисляем хеш для этапа
+        self.vectorization_hash = self._get_vectorization_hash()
+        
+        # Проверяем кэш
+        if self.vectorization_hash in cache:
+            print(f"✓ Использован кэш для этапа vectorization")
+            self.borders_mask, self.svg_paths = cache[self.vectorization_hash]
+        else:
+            # Выполняем вычисления
+            self.borders_mask, self.svg_paths = vectorize_image(
+                self.cluster_labels, self.config, self.config.get('logging', False)
+            )
+            # Сохраняем в кэш
+            cache[self.vectorization_hash] = (self.borders_mask, self.svg_paths)
 
     def run_all(self):
         """Удобный метод, чтобы прогнать весь пайплайн разом."""
         self.preprocessing()
         self.quantizing()
         self.postprocessing()
+        self.vectorization()
         print_timing_report(self.timings)

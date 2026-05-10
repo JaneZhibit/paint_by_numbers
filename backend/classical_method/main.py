@@ -20,18 +20,21 @@ test_features = {
     }
 }
 
+path = r"C:\Users\Andrey\Downloads\мы.jpg"
 config = {
-    'img_path': 'test_images/wolf.webp',
+    'img_path': path,
     'target_max_side': 1000,
-    'canvas_width_mm': 600,
+    'canvas_width_mm': 400,
     'canvas_height_mm': 300,
     'min_diameter_mm': 3,
     'colours_cnt': 'auto',
     'logging': True,
     'algorithm': {
         'preprocessing': {
-            'filter_type': 'none',
+            'filter_type': 'bilateral',
+            'median': {'kernel_size': 5},
             'pyrMeanShift': {'sp': 5, 'sr': 15},
+            'bilateral': {'d': 9, 'sigmaColor': 35, 'sigmaSpace': 135},
             'saliency_map': {'enabled': test_features['preprocessing']['saliency_map_enabled']}
         },
         'quantizing': {
@@ -47,9 +50,11 @@ config = {
 }
 
 gen = ClassicalPaintByNumbers(config)
-gen.run_all()
-save_path = 'output/comparison_10.png'
-save_stages_comparison(gen, ['original', 'preprocessing', 'quantizing', 'postprocessing'], save_path=save_path)
+gen.run_all
+
+save_path = '../../frontend/examples/preprocessing/filters/bilateral/4.png'
+save_stages_comparison(gen, ['quantizing', 'postprocessing', 'vectorization'], save_path=save_path, title="")
+print(gen.timings)
 
 print("Pipeline completed successfully.")
 

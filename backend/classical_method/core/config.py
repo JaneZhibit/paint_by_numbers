@@ -42,6 +42,15 @@ def get_default_algo_config():
             'connectivity': 8,
             'contrast_threshold': 100.0,
             'grow_details': {'enabled': False, 'max_dilation_steps': 5}
+        },
+        'vectorization': {
+            'method': 'raster_shift',  # Варианты: 'raster_shift', 'contours'
+            'smoothing': {
+                'enabled': True,
+                'method': 'approx_poly_dp',  # Варианты: 'approx_poly_dp', 'chaikin'
+                'approx_poly_dp': {'epsilon_factor': 0.005},
+                'chaikin': {'iterations': 2}
+            }
         }
     }
 

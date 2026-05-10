@@ -1,1 +1,82 @@
-{}
+{
+  "Для портретного масштаба автоцвет": {
+    "preprocessing": {
+      "filter_type": "pyrMeanShift",
+      "contrast": 1.0,
+      "pyrMeanShift": {
+        "sp": 5,
+        "sr": 15
+      },
+      "median": {
+        "kernel_size": 3
+      },
+      "bilateral": {
+        "d": 9,
+        "sigmaColor": 75,
+        "sigmaSpace": 75
+      },
+      "saliency_map": {
+        "enabled": false,
+        "saliency_bg_scale": 1.5,
+        "saliency_focus_scale": 0.5
+      }
+    },
+    "quantizing": {
+      "color_space": "LAB",
+      "palette_method": "kmeans",
+      "spatial_method": "none",
+      "kmeans": {
+        "max_iter": 40,
+        "epsilon": 1.0,
+        "attempts": 3
+      },
+      "weighted_kmeans": {
+        "enabled": true,
+        "edge_threshold1": 50,
+        "edge_threshold2": 150,
+        "weight_factor": 5
+      },
+      "superpixels": {
+        "enabled": false,
+        "region_size": 20,
+        "ruler": 15.0
+      },
+      "auto_color": {
+        "enabled": true,
+        "k_min": 6,
+        "k_max": 40,
+        "k_step": 2,
+        "subsample_ratio": 0.2,
+        "stop_threshold_percent": 2.0
+      },
+      "hierarchical_split": {
+        "enabled": false,
+        "min_area_pixels": 2000,
+        "variance_threshold": 30.0
+      }
+    },
+    "postprocessing": {
+      "clean_iterations": 3,
+      "morph_kernel_size": 3,
+      "connectivity": 8,
+      "contrast_threshold": 150.0,
+      "grow_details": {
+        "enabled": false,
+        "max_dilation_steps": 5
+      }
+    },
+    "vectorization": {
+      "method": "raster_shift",
+      "smoothing": {
+        "enabled": true,
+        "method": "approx_poly_dp",
+        "approx_poly_dp": {
+          "epsilon_factor": 0.005
+        },
+        "chaikin": {
+          "iterations": 2
+        }
+      }
+    }
+  }
+}
