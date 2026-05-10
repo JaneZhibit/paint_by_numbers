@@ -11,16 +11,16 @@ from pipeline import ClassicalPaintByNumbers
 # Заглушка путей к тестовым изображениям.
 # Замените на реальные пути к картинкам для тестирования.
 IMAGE_PATHS = [
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\человек.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\дом.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\дорога.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\елки.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\лошадь.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\люди.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\магазин.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\нг.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\парус.jpg",
-    r"C:\Users\Andrey\Desktop\картины\картины 4 к 3\тропинка.jpg"
+    r'./картины 4 к 3/дом.jpg',
+    r'./картины 4 к 3/дорога.jpg',
+    r'./картины 4 к 3/елки.jpg',
+    r'./картины 4 к 3/лошадь.jpg',
+    r'./картины 4 к 3/люди.jpg',
+    r'./картины 4 к 3/магазин.jpg',
+    r'./картины 4 к 3/нг.jpg',
+    r'./картины 4 к 3/парус.jpg',
+    r'./картины 4 к 3/тропинка.jpg',
+    r'./картины 4 к 3/человек.jpg',
 ]
 
 def run_experiments():
