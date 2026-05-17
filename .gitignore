@@ -2,7 +2,8 @@
 .venv
 .idea
 .project_snapshots
-backend/classical_method/output
+project_snapshot.py
+results
 
 # Python cache
 __pycache__/
