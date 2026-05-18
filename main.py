@@ -27,11 +27,11 @@ custom_config = {
         "canvas": {
             "width_mm": 300,
             "height_mm": 400,
-            "min_brush_mm": 3.0,
+            "min_brush_mm": 3,
         },
         "preprocessing": {
             "smoothing": {
-                "method": "mean_shift",
+                "method": "bilateral",
                 "params": {
                     "mean_shift": {
                         "spatial_radius": 15,
@@ -50,17 +50,17 @@ custom_config = {
         },
         "quantization": {
             "method": "kmeans",
-            "colors_count": 16,
+            "colors_count": 20,
             "color_space": "lab"
         },
         "vectorization": {
             "scale_factor": 4,
-            "blur_size": 41,
+            "blur_size": 31,
             "epsilon_factor": 0.001
         }
     }
 
-for img_path in imgs[:4]:
+for img_path in [r"C:/Users/Andrey/Downloads/мы.jpg"]:
 
     pipeline = PaintPipeline(user_config=custom_config)
 
@@ -71,9 +71,9 @@ for img_path in imgs[:4]:
     pipeline.vectorize()
     pipeline.render_all()
 
-    pipeline.show_stage("preprocessed", save_path=f'results/preproc{img_path.split("/")[-1]}')
-    pipeline.show_stage("quantized", save_path=f'results/quant{img_path.split("/")[-1]}')
-    pipeline.show_stage("postprocessed", save_path=f'results/post{img_path.split("/")[-1]}')
-    pipeline.show_stage("vectorized", save_path=f'results/vector{img_path.split("/")[-1]}')
+    #pipeline.show_stage("preprocessed", save_path=f'results/preproc2{img_path.split("/")[-1]}')
+    #pipeline.show_stage("quantized", save_path=f'results/quant2{img_path.split("/")[-1]}')
+    #pipeline.show_stage("postprocessed", save_path=f'results/waterpost{img_path.split("/")[-1]}')
+    #pipeline.show_stage("vectorized", save_path=f'results/watervector{img_path.split("/")[-1]}')
     pipeline.show_stage("color_reference", save_path=f'results/color_ref{img_path.split("/")[-1]}')
-    pipeline.show_stage("numbered", save_path=f'results/numbered{img_path.split("/")[-1]}')
+    #pipeline.show_stage("numbered", save_path=f'results/numbered2{img_path.split("/")[-1]}')

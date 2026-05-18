@@ -77,38 +77,41 @@ class PaintPipeline:
         logger.info(f"Предобработка завершена. Итоговый размер: {self.preprocessed_image.shape[:2]}")
 
     def quantize(self):
-        """Этап квантования цветов (поиск палитры)."""
+        """Этап квантования цветов."""
         if self.preprocessed_image is None:
             raise ValueError("Вызовите preprocess() перед квантованием.")
 
-        q_config = self.config.get("quantization", {})
-        colors_count = q_config.get("colors_count", 16)
-
         with Timer("Quantization", self.timings):
-            q_img, labels, palette = apply_quantization(self.preprocessed_image, q_config)
+            q_img, labels, palette = apply_quantization(self.preprocessed_image, self.config)
 
             self.quantized_image = q_img
             self.cluster_labels = labels
             self.palette = palette
 
-        logger.info(f"Квантование завершено. Найдено цветов: {colors_count}")
+        logger.info(f"Квантование завершено. Использовано цветов: {len(self.palette)}")
 
     def postprocess(self):
-        """Этап постобработки (очистка от мусора и подготовка к векторизации)."""
+        """Этап постобработки."""
         if self.cluster_labels is None or self.palette is None:
             raise ValueError("Вызовите quantize() перед постобработкой.")
 
         with Timer("Postprocessing", self.timings):
+            labels = self.cluster_labels.copy()
+
+            # WATERSHED
+            if self.config.get("postprocessing", {}).get("use_watershed", False):
+                from core.refinement import apply_watershed_refinement
+                # Используем оригинальное изображение для поиска границ
+                labels = apply_watershed_refinement(self.preprocessed_image, labels, self.config)
+
             labels, image_rgb = apply_postprocessing(
-                self.cluster_labels,
+                labels,  # Передаем либо оригинальные, либо уточненные водоразделом лейблы
                 self.palette,
                 self.config
             )
 
             self.final_labels = labels
             self.final_image = image_rgb
-
-        logger.info("Постобработка завершена.")
 
     def vectorize(self):
         """Этап векторизации."""
@@ -181,6 +184,7 @@ class PaintPipeline:
         plt.tight_layout()
         if save_path: plt.savefig(save_path)
         # plt.show()
+        plt.close()
 
     def run_all(self, image_path: str):
         """Пример запуска пайплайна"""

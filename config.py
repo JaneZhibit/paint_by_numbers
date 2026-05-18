@@ -39,18 +39,27 @@ def get_default_config():
         },
         "quantization": {
             "method": "kmeans",
-            "colors_count": 16,
-            "color_space": "lab",      # 'lab' или 'rgb'
+            "colors_count": 20,        # Игнорируется, если auto_colors = True
+            "auto_colors": False,       # Включить автоматический подбор
+            "auto_threshold": 0.05,    # Порог улучшения (5%). Если следующий шаг дает меньше - стоп.
+            "color_space": "lab",
             "params": {
                 "kmeans": {
-                    "attempts": 10,
-                    "criteria_eps": 0.2,
-                    "criteria_max_iter": 100
+                    "attempts": 5,     # Уменьшим количество попыток для ускорения подбора
+                    "criteria_eps": 0.5,
+                    "criteria_max_iter": 50
                 }
             }
         },
         "postprocessing": {
-            "contrast_threshold": 60.0  # Защита контрастных деталей (лиц) от удаления
+            "contrast_threshold": 50.0,  # Защита контрастных деталей (лиц) от удаления
+            "merge_strategy": "color_weighted",  # Варианты: 'largest_border' или 'color_weighted'
+            "grow_high_contrast": False,  # Включить/выключить расширение мелких деталей на 1px
+            "use_watershed": False,  # Включить/выключить Watershed
+            "watershed_params": {
+                "erosion_size": 3,  # Насколько сильно сжимать маркеры (ядра)
+                "gradient_blur": 5  # Размытие для карты градиентов
+            }
         },
         "vectorization": {
             "scale_factor": 4,          # Во сколько раз увеличиваем холст. 4 удобно, т.к. каждого пикселя теперь 4

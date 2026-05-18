@@ -3,7 +3,7 @@
 .idea
 .project_snapshots
 project_snapshot.py
-results
+./results
 
 # Python cache
 __pycache__/

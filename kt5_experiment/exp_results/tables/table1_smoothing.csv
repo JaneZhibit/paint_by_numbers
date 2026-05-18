@@ -1,0 +1,4 @@
+smoothing_method,time_s,zones_total,zones_small_pct,edge_preservation
+none,1.85,159,68.9,1.00
+bilateral,1.68,160,49.4,0.78
+mean_shift,1.99,105,62.3,0.69
