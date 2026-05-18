@@ -1,0 +1,16 @@
+{
+  "image_type": "portrait",
+  "smoothing_method": "mean_shift",
+  "colors_count": 8,
+  "time_preprocessing_s": 0.3669,
+  "time_quantization_s": 0.1573,
+  "time_postprocessing_s": 0.093,
+  "time_vectorization_s": 0.3442,
+  "time_rendering_s": 0.2821,
+  "time_total_s": 1.2434,
+  "zones_total": 74,
+  "zones_small_pct": 52.99,
+  "palette_size": 8,
+  "edge_preservation": 0.6391,
+  "image_complexity": 430.29
+}

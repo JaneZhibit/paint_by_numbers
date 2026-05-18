@@ -1,0 +1,16 @@
+{
+  "image_type": "still_life",
+  "smoothing_method": "mean_shift",
+  "colors_count": 24,
+  "time_preprocessing_s": 0.3342,
+  "time_quantization_s": 0.3591,
+  "time_postprocessing_s": 0.1745,
+  "time_vectorization_s": 1.1297,
+  "time_rendering_s": 0.5118,
+  "time_total_s": 2.5094,
+  "zones_total": 134,
+  "zones_small_pct": 53.15,
+  "palette_size": 24,
+  "edge_preservation": 0.7685,
+  "image_complexity": 120.99
+}

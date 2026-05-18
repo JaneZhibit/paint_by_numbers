@@ -2,3 +2,27 @@
 .venv
 .idea
 .project_snapshots
+project_snapshot.py
+./results
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Workspace (runtime data)
+workspace/cache/
+workspace/history/
+workspace/uploads/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

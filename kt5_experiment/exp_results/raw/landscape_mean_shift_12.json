@@ -1,0 +1,16 @@
+{
+  "image_type": "landscape",
+  "smoothing_method": "mean_shift",
+  "colors_count": 12,
+  "time_preprocessing_s": 0.5739,
+  "time_quantization_s": 0.1988,
+  "time_postprocessing_s": 0.3667,
+  "time_vectorization_s": 0.4952,
+  "time_rendering_s": 0.3251,
+  "time_total_s": 1.9598,
+  "zones_total": 106,
+  "zones_small_pct": 72.46,
+  "palette_size": 12,
+  "edge_preservation": 0.6555,
+  "image_complexity": 1506.76
+}

@@ -1,0 +1,16 @@
+{
+  "image_type": "portrait",
+  "smoothing_method": "bilateral",
+  "colors_count": 16,
+  "time_preprocessing_s": 0.0071,
+  "time_quantization_s": 0.2324,
+  "time_postprocessing_s": 0.1368,
+  "time_vectorization_s": 0.6616,
+  "time_rendering_s": 0.426,
+  "time_total_s": 1.4639,
+  "zones_total": 125,
+  "zones_small_pct": 47.48,
+  "palette_size": 16,
+  "edge_preservation": 0.7122,
+  "image_complexity": 430.29
+}
