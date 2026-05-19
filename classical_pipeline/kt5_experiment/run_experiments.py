@@ -15,11 +15,11 @@ import cv2
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from pipeline import PaintPipeline  # noqa: E402
-from core.metrics import get_edge_preservation, get_image_complexity  # noqa: E402
+from classical_pipeline.pipeline import PaintPipeline  # noqa: E402
+from classical_pipeline.core.metrics import get_edge_preservation, get_image_complexity  # noqa: E402
 
 RESULTS_DIR = os.path.join(SCRIPT_DIR, "exp_results")
 RAW_DIR = os.path.join(RESULTS_DIR, "raw")

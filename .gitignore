@@ -3,7 +3,7 @@
 .idea
 .project_snapshots
 project_snapshot.py
-./results
+classical_pipeline/results
 
 # Python cache
 __pycache__/
