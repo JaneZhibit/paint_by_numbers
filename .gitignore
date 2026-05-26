@@ -1,28 +1,56 @@
-.gitignore
-.venv
-.idea
-.project_snapshots
-project_snapshot.py
-classical_pipeline/results
-
-# Python cache
+# Python
+.venv/
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# ML weights & caches (download locally, do not commit)
+*.pt
+*.pth
+*.onnx
+*.safetensors
+ml_pipeline/models/
+./ml_pipeline/models
+
+# Pipeline outputs & local test assets
+classical_pipeline/results/
+classical_pipeline/kt5_experiment/exp_results/
+ml_pipeline/results/
+ml_pipeline/test_images/
+classical_pipeline/test_images/
+
+# Node.js
+node_modules/
+**/node_modules/
+# Accidental npm at repo root (frontend deps: app/frontend/)
+/package.json
+/package-lock.json
+
+# Frontend build
+app/frontend/dist/
+app/frontend/.env
+app/frontend/.env.*
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Project tools
+.project_snapshots/
+project_snapshot.py
 
 # Workspace (runtime data)
 workspace/cache/
 workspace/history/
 workspace/uploads/
-
-# IDE
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
