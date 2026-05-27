@@ -5,7 +5,6 @@ from PIL import Image
 from transformers import pipeline
 import time
 
-
 # --- НАША ЭВРИСТИКА (ПРАВИЛА НА ОСНОВЕ YOLO/SEGFORMER) ---
 def rule_based_classification(semantic_objects: list) -> str:
     """
@@ -63,7 +62,7 @@ def test_clip_classification(image_paths: list):
 
         print(f"ML Классификатор (CLIP) отработал за {ml_time:.2f} сек:")
         # Выводим Топ-2 предсказания
-        for i in range(2):
+        for i in range(3):
             print(f"  {i + 1}. {results[i]['label']} ({results[i]['score'] * 100:.1f}%)")
 
     print("\n" + "=" * 60)
@@ -72,11 +71,36 @@ def test_clip_classification(image_paths: list):
 if __name__ == "__main__":
     # Укажи тут свои тестовые картинки разных жанров
     test_images = [
-        "../classical_pipeline/test_images/масштаб 4 к 3/portret_1.jpg",
-        "../classical_pipeline/test_images/масштаб 4 к 3/landscape_1.jpg",
-        "../classical_pipeline/test_images/масштаб 4 к 3/animal_1.jpg",
-        "../classical_pipeline/test_images/масштаб 4 к 3/naturmort_1.jpg",
-    ]
+    "test_images/масштаб 4 к 3/animal_1.jpg",
+    "test_images/масштаб 4 к 3/animal_2.jpg",
+    "test_images/масштаб 4 к 3/animal_3.jpg",
+    "test_images/масштаб 4 к 3/animal_4.jpg",
+    "test_images/масштаб 4 к 3/animal_5.jpg",
+    "test_images/масштаб 4 к 3/landscape_1.jpg",
+    "test_images/масштаб 4 к 3/landscape_2.jpg",
+    "test_images/масштаб 4 к 3/landscape_3.jpg",
+    "test_images/масштаб 4 к 3/landscape_4.jpg",
+    "test_images/масштаб 4 к 3/landscape_5.jpg",
+    "test_images/масштаб 4 к 3/naturmort_1.jpg",
+    "test_images/масштаб 4 к 3/naturmort_2.jpg",
+    "test_images/масштаб 4 к 3/naturmort_3.jpg",
+    "test_images/масштаб 4 к 3/naturmort_4.jpg",
+    "test_images/масштаб 4 к 3/naturmort_5.jpg",
+    "test_images/масштаб 4 к 3/portret_1.jpg",
+    "test_images/масштаб 4 к 3/portret_2.jpg",
+    "test_images/масштаб 4 к 3/portret_3.jpg",
+    "test_images/масштаб 4 к 3/portret_4.jpg",
+    "test_images/масштаб 4 к 3/portret_5.jpg",
+    "test_images/масштаб 4 к 3/jane.jpg",
+    "test_images/масштаб 4 к 3/andrey.jpg",
+    "test_images/масштаб 4 к 3/andrey_2.jpg",
+    "test_images/масштаб 4 к 3/andrey_dog.jpg",
+    "test_images/масштаб 4 к 3/andrey_dog_2.jpg",
+    "test_images/масштаб 4 к 3/pacific.jpg"
+
+
+]
 
     # 1. Проверяем чистый ML (может потребоваться pip install transformers)
     test_clip_classification(test_images)
+

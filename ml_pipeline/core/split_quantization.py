@@ -5,9 +5,31 @@ import logging
 logger = logging.getLogger("PaintByNumbers")
 
 
+def get_super_category(label: str) -> str:
+    """Группирует сотни классов в 5 логических макро-категорий."""
+    lbl = label.lower().replace("[fg]", "").replace("[bg]", "").strip()
+
+    flora = ["tree", "grass", "plant", "field", "flower", "earth", "dirt", "mountain", "hill", "land", "rock", "sand",
+             "nature", "leaf"]
+    sky_water = ["sky", "water", "sea", "lake", "river", "cloud", "ocean", "pool", "waterfall"]
+    architecture = ["building", "wall", "road", "bridge", "ceiling", "floor", "house", "sidewalk", "street", "path",
+                    "architecture", "city", "tower", "fence"]
+    foreground = ["person", "dog", "cat", "bear", "bird", "horse", "animal", "backpack", "car", "bicycle", "boat",
+                  "chair", "table", "bottle"]
+
+    if any(f in lbl for f in flora): return "flora"
+    if any(s in lbl for s in sky_water): return "sky_water"
+    if any(a in lbl for a in architecture): return "architecture"
+    if any(fg in lbl for fg in foreground): return "foreground"
+
+    return "other"
+
+
 def find_optimal_k(pixel_data: np.ndarray, threshold: float, config: dict, max_k: int = 16) -> int:
     """Ищет оптимальное количество цветов на основе Marginal Gain (прирост точности)."""
     if len(pixel_data) < 10:
+        return 1
+    if max_k <= 1:
         return 1
 
     sample_size = 20000
@@ -21,7 +43,7 @@ def find_optimal_k(pixel_data: np.ndarray, threshold: float, config: dict, max_k
     best_k = 2
     fast_criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
 
-    # Идем с шагом 2
+    # Идем с шагом 2 для скорости
     for k in range(2, max_k + 1, 2):
         actual_k = min(k, len(sample_pixels))
         inertia, _, _ = cv2.kmeans(
@@ -61,92 +83,131 @@ def run_kmeans(pixel_data: np.ndarray, k: int, config: dict) -> tuple:
 
 def apply_split_quantization(image: np.ndarray, semantic_objects: list, config: dict) -> tuple:
     q_config = config.get("quantization", {})
-    total_colors = q_config.get("total_colors", 16)
+    total_colors = q_config.get("total_colors", 32)
 
     h, w = image.shape[:2]
 
-    # 1. Формируем маски Foreground и Background
-    fg_mask = np.zeros((h, w), dtype=np.uint8)
+    # 1. Формируем маски по Супер-Категориям
+    super_masks = {
+        "foreground": np.zeros((h, w), dtype=np.uint8),
+        "flora": np.zeros((h, w), dtype=np.uint8),
+        "sky_water": np.zeros((h, w), dtype=np.uint8),
+        "architecture": np.zeros((h, w), dtype=np.uint8),
+        "other": np.zeros((h, w), dtype=np.uint8)
+    }
+
     for obj in semantic_objects:
         if obj.get("is_foreground", False):
-            fg_mask[obj["mask"] == 255] = 255
+            sc = "foreground"
+        else:
+            sc = get_super_category(obj["label"])
+        super_masks[sc][obj["mask"] == 255] = 255
 
-    bg_mask = cv2.bitwise_not(fg_mask)
+    # Собираем пиксели, не попавшие ни в одну маску объектов.
+    all_assigned = np.zeros((h, w), dtype=np.uint8)
+    for mask in super_masks.values():
+        all_assigned = cv2.bitwise_or(all_assigned, mask)
+    unassigned_mask = cv2.bitwise_not(all_assigned)
+    super_masks["other"] = cv2.bitwise_or(super_masks["other"], unassigned_mask)
 
-    # 2. Перевод в LAB
+    # 2. Перевод в LAB с нормализацией L-канала (0-100)
     working_img = cv2.cvtColor(image, cv2.COLOR_RGB2LAB).astype(np.float32)
     working_img[:, :, 0] *= (100.0 / 255.0)
 
-    # 3. Извлекаем данные
-    fg_data = working_img[fg_mask == 255]
-    bg_data = working_img[bg_mask == 255]
+    # 3. Извлекаем данные пикселей для каждой категории
+    sc_data = {}
+    for sc, mask in super_masks.items():
+        data = working_img[mask == 255]
+        if len(data) > 0:
+            sc_data[sc] = data
 
-    # 4. АВТОМАТИЧЕСКОЕ ИЛИ РУЧНОЕ ОПРЕДЕЛЕНИЕ K
+    # 4. ДИНАМИЧЕСКОЕ БЮДЖЕТИРОВАНИЕ ЦВЕТОВ (AUTO-K)
+    sc_budgets = {}
+
     if q_config.get("auto_colors", True):
-        logger.info("Автоподбор количества цветов (Marginal Gain)...")
-        fg_k = find_optimal_k(fg_data, q_config.get("fg_threshold", 0.02), config, max_k=16) if len(fg_data) > 0 else 0
-        bg_k = find_optimal_k(bg_data, q_config.get("bg_threshold", 0.06), config, max_k=10) if len(bg_data) > 0 else 0
+        logger.info("Автоподбор цветов для супер-категорий (Marginal Gain)...")
+        fg_thresh = q_config.get("fg_threshold", 0.02)
+        bg_thresh = q_config.get("bg_threshold", 0.06)
 
-        # Корректировка, если мы вылезли за лимит total_colors
-        current_total = fg_k + bg_k
+        current_total = 0
+        for sc, data in sc_data.items():
+            thresh = fg_thresh if sc == "foreground" else bg_thresh
+            max_allowed = 16 if sc == "foreground" else 10
+
+            optimal_k = find_optimal_k(data, thresh, config, max_k=max_allowed)
+            sc_budgets[sc] = optimal_k
+            current_total += optimal_k
+
         if current_total > total_colors and current_total > 0:
             logger.info(f"Сумма ({current_total}) превышает лимит {total_colors}. Пропорциональное сжатие...")
-            fg_k = max(1, int(round((fg_k / current_total) * total_colors)))
-            bg_k = max(1, total_colors - fg_k)
+            allocated = 0
+            for sc in sc_budgets:
+                sc_budgets[sc] = max(1, int(round((sc_budgets[sc] / current_total) * total_colors)))
+                allocated += sc_budgets[sc]
+
+            if allocated != total_colors:
+                largest_sc = max(sc_budgets, key=sc_budgets.get)
+                sc_budgets[largest_sc] += (total_colors - allocated)
+                sc_budgets[largest_sc] = max(1, sc_budgets[largest_sc])
     else:
-        fg_k = q_config.get("foreground_colors", 12)
-        bg_k = q_config.get("background_colors", 4)
-        if len(fg_data) == 0: bg_k = total_colors
-        if len(bg_data) == 0: fg_k = total_colors
+        logger.info("Auto-K отключен. Используем жесткое распределение бюджета.")
+        fg_budget = q_config.get("foreground_colors", 12)
+        bg_budget = total_colors - fg_budget
 
-    logger.info(f"Запуск Split K-Means: Foreground ({fg_k} цветов), Background ({bg_k} цветов)")
+        bg_categories = [sc for sc in sc_data.keys() if sc != "foreground"]
 
-    # 5. Запускаем K-Means
-    fg_labels, fg_centers = run_kmeans(fg_data, fg_k, config)
-    bg_labels, bg_centers = run_kmeans(bg_data, bg_k, config)
+        if "foreground" in sc_data:
+            sc_budgets["foreground"] = fg_budget
+        if len(bg_categories) > 0:
+            colors_per_bg = max(1, bg_budget // len(bg_categories))
+            for sc in bg_categories:
+                sc_budgets[sc] = colors_per_bg
 
-    # 6. Дедупликация (Объединение похожих цветов)
+    # 5. ЗАПУСК K-MEANS ДЛЯ КАЖДОЙ КАТЕГОРИИ
+    sc_labels = {}
+    sc_centers = {}
+
+    for sc, budget in sc_budgets.items():
+        logger.info(f" -> Категория [{sc.upper()}]: Выделено {budget} цветов.")
+        labels, centers = run_kmeans(sc_data[sc], budget, config)
+        sc_labels[sc] = labels
+        sc_centers[sc] = centers
+
+    # 6. ГЛОБАЛЬНАЯ ДЕДУПЛИКАЦИЯ В ПРОСТРАНСТВЕ LAB
     final_palette = []
-    fg_mapped_indices = []
-    bg_mapped_indices = []
+    mapped_labels_dict = {}
+    MERGE_THRESHOLD = 8.0
 
-    if len(fg_centers) > 0:
-        for center in fg_centers:
-            final_palette.append(center)
-            fg_mapped_indices.append(len(final_palette) - 1)
-
-    MERGE_THRESHOLD = 12.0
-
-    if len(bg_centers) > 0:
-        for center in bg_centers:
+    for sc, centers in sc_centers.items():
+        mapped_indices = []
+        for center in centers:
             if len(final_palette) > 0:
                 dists = np.linalg.norm(np.array(final_palette) - center, axis=1)
                 min_dist_idx = int(np.argmin(dists))
 
                 if dists[min_dist_idx] < MERGE_THRESHOLD:
-                    bg_mapped_indices.append(min_dist_idx)
+                    mapped_indices.append(min_dist_idx)
                 else:
                     final_palette.append(center)
-                    bg_mapped_indices.append(len(final_palette) - 1)
+                    mapped_indices.append(len(final_palette) - 1)
             else:
                 final_palette.append(center)
-                bg_mapped_indices.append(len(final_palette) - 1)
+                mapped_indices.append(0)
+        mapped_labels_dict[sc] = mapped_indices
 
     final_palette = np.array(final_palette, dtype=np.float32)
     logger.info(f"Уникальных цветов в итоговой палитре (после слияния дубликатов): {len(final_palette)}")
 
-    # 7. Сборка матрицы индексов
+    # 7. СБОРКА МАТРИЦЫ ИНДЕКСОВ
     final_labels_2d = np.zeros((h, w), dtype=np.int32)
 
-    if len(fg_data) > 0:
-        mapped_fg_labels = np.array(fg_mapped_indices)[fg_labels]
-        final_labels_2d[fg_mask == 255] = mapped_fg_labels
+    for sc, labels in sc_labels.items():
+        if len(labels) > 0:
+            mask = super_masks[sc]
+            mapped_sc_labels = np.array(mapped_labels_dict[sc])[labels]
+            final_labels_2d[mask == 255] = mapped_sc_labels
 
-    if len(bg_data) > 0:
-        mapped_bg_labels = np.array(bg_mapped_indices)[bg_labels]
-        final_labels_2d[bg_mask == 255] = mapped_bg_labels
-
-    # 8. Возврат палитры и картинки в RGB
+    # 8. ВОЗВРАТ ПАЛИТРЫ И КАРТИНКИ В RGB
     centers_lab = final_palette.copy()
     centers_lab[:, 0] *= (255.0 / 100.0)
     centers_lab = np.clip(centers_lab, 0, 255).astype(np.uint8)

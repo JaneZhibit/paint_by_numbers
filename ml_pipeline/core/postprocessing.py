@@ -5,33 +5,76 @@ import logging
 logger = logging.getLogger("PaintByNumbers")
 
 
-def calculate_physical_metrics(img_shape: tuple, config: dict) -> tuple:
-    """Возвращает словари с размерами кистей и минимальных площадей в пикселях."""
+def calculate_dynamic_maps(
+    img_shape: tuple,
+    depth_map: np.ndarray,
+    protection_mask: np.ndarray,
+    config: dict,
+    fg_mask: np.ndarray,
+) -> tuple:
+    """Генерирует 2D-карты требуемого размера кисти с плавным переходом по глубине, но жестко защищает Foreground."""
     canvas_config = config.get("canvas", {})
     canvas_w_mm = canvas_config.get("width_mm", 300)
     canvas_h_mm = canvas_config.get("height_mm", 400)
 
-    img_h, img_w = img_shape[:2]
-    px_per_mm = min(img_w / canvas_w_mm, img_h / canvas_h_mm)
+    h, w = img_shape[:2]
+    px_per_mm = min(w / canvas_w_mm, h / canvas_h_mm)
 
-    brush_mm = config.get("postprocessing", {}).get("brush_sizes_mm", {})
+    post_config = config.get("postprocessing", {})
+    use_depth = post_config.get("use_depth_morphology", True)
 
-    brush_px = {
-        "background": max(1, int(brush_mm.get("background", 4.0) * px_per_mm)),
-        "foreground": max(1, int(brush_mm.get("foreground", 2.0) * px_per_mm)),
-        "face": max(1, int(brush_mm.get("face_keypoints", 1.0) * px_per_mm))
-    }
+    # Читаем размеры кистей из конфига. Если `brush_sizes_mm` ещё не завели,
+    # используем значения из предыдущей версии конфига как fallback.
+    brush_mm = post_config.get("brush_sizes_mm", {})
+    bg_max_mm = brush_mm.get("background", post_config.get("morphology_max_brush_mm", 3.5))
+    fg_mm = brush_mm.get("foreground", post_config.get("morphology_min_brush_mm", 1.5))
+    face_mm = brush_mm.get("face_keypoints", post_config.get("face_keypoints_mm", 1.0))
 
-    area_px = {k: v ** 2 for k, v in brush_px.items()}
+    max_px = max(3, int(bg_max_mm * px_per_mm))
+    min_px = max(3, int(fg_mm * px_per_mm))
+    face_px = max(3, int(face_mm * px_per_mm))
+
+    # Делаем нечетными для медианного фильтра
+    if max_px % 2 == 0:
+        max_px += 1
+    if min_px % 2 == 0:
+        min_px += 1
+    if face_px % 2 == 0:
+        face_px += 1
+
+    # 1) Фон — плавно по глубине (или просто max_px)
+    if use_depth and depth_map is not None:
+        brush_float = max_px - (depth_map / 255.0) * (max_px - min_px)
+        brush_map_px = np.round(brush_float).astype(np.uint16)
+        brush_map_px = brush_map_px + (1 - brush_map_px % 2)
+    else:
+        brush_map_px = np.full((h, w), max_px, dtype=np.uint16)
+
+    # 2) Жесткий приоритет: Foreground всегда тонкой кистью
+    brush_map_px[fg_mask == 255] = min_px
+
+    # 3) Абсолютный приоритет: лица
+    brush_map_px[protection_mask == 255] = face_px
+
+    area_map_px = brush_map_px ** 2
 
     logger.info(
-        f"Физика кистей (px): BG={brush_px['background']}, FG={brush_px['foreground']}, Face={brush_px['face']}")
-    return brush_px, area_px
+        f"Морфология кистей: Фон до {int(np.max(brush_map_px))}px, "
+        f"Объекты {min_px}px, Лица {face_px}px."
+    )
+    return brush_map_px, area_map_px
 
 
-def remove_small_regions(labels: np.ndarray, brush_px: dict, area_px: dict,
-                         palette: np.ndarray, config: dict,
-                         fg_mask: np.ndarray, protection_mask: np.ndarray) -> np.ndarray:
+def remove_small_regions(
+    labels: np.ndarray,
+    brush_map_px: np.ndarray,
+    area_map_px: np.ndarray,
+    palette: np.ndarray,
+    config: dict,
+    fg_mask: np.ndarray,
+    protection_mask: np.ndarray,
+) -> np.ndarray:
+
     post_config = config.get("postprocessing", {})
     contrast_threshold = post_config.get("contrast_threshold", 60.0)
     grow_high_contrast = post_config.get("grow_high_contrast", True)
@@ -54,27 +97,15 @@ def remove_small_regions(labels: np.ndarray, brush_px: dict, area_px: dict,
             for i in range(1, num_components):
                 area = stats[i, cv2.CC_STAT_AREA]
 
-                # Вырезаем BBox зоны для быстрого поиска пересечений (оптимизация)
                 x, y, w, h = stats[i, cv2.CC_STAT_LEFT:cv2.CC_STAT_HEIGHT + 1]
                 island_slice = np.uint8(comp_labels[y:y + h, x:x + w] == i)
-                prot_slice = protection_mask[y:y + h, x:x + w]
-                fg_slice = fg_mask[y:y + h, x:x + w]
 
-                # ДИНАМИЧЕСКИЙ ВЫБОР ПЛОЩАДИ: Где находится эта пылинка?
-                overlap_face = np.any((island_slice == 1) & (prot_slice == 255))
-                overlap_fg = np.any((island_slice == 1) & (fg_slice == 255))
+                local_areas = area_map_px[y:y + h, x:x + w][island_slice == 1]
+                local_brushes = brush_map_px[y:y + h, x:x + w][island_slice == 1]
 
-                if overlap_face:
-                    req_area = area_px["face"]
-                    req_brush = brush_px["face"]
-                elif overlap_fg:
-                    req_area = area_px["foreground"]
-                    req_brush = brush_px["foreground"]
-                else:
-                    req_area = area_px["background"]
-                    req_brush = brush_px["background"]
+                req_area = np.median(local_areas)
+                req_brush = int(np.median(local_brushes))
 
-                # Если зона меньше ТРЕБУЕМОГО для этой области размера
                 if area < req_area:
                     island_mask = np.uint8(comp_labels == i)
                     dilated = cv2.dilate(island_mask, np.ones((3, 3), np.uint8))
@@ -95,15 +126,15 @@ def remove_small_regions(labels: np.ndarray, brush_px: dict, area_px: dict,
                                 best_cost = cost
                                 best_neighbor_cls = n_cls
 
-                        # Защита контраста
                         color_distance = np.linalg.norm(palette_lab[cls] - palette_lab[best_neighbor_cls])
 
                         if color_distance > contrast_threshold:
                             if grow_high_contrast:
-                                # Отращиваем ядром ТРЕБУЕМОГО размера
                                 grow_ksize = req_brush if req_brush % 2 != 0 else req_brush + 1
                                 grow_ksize = max(3, grow_ksize)
-                                grow_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (grow_ksize, grow_ksize))
+                                grow_kernel = cv2.getStructuringElement(
+                                    cv2.MORPH_ELLIPSE, (grow_ksize, grow_ksize)
+                                )
 
                                 expanded_island = cv2.dilate(island_mask, grow_kernel)
                                 growth_ring = (expanded_island == 1) & (island_mask == 0)
@@ -118,31 +149,34 @@ def remove_small_regions(labels: np.ndarray, brush_px: dict, area_px: dict,
         if removed_in_pass == 0:
             break
 
+    logger.info(f"Удалено мелких зон (пылинок): {total_removed}")
     return out_labels
 
 
-def apply_postprocessing(labels: np.ndarray, palette: np.ndarray, config: dict,
-                         fg_mask: np.ndarray, protection_mask: np.ndarray) -> tuple:
-    brush_px, area_px = calculate_physical_metrics(labels.shape, config)
+def apply_postprocessing(
+    labels: np.ndarray,
+    palette: np.ndarray,
+    config: dict,
+    fg_mask: np.ndarray,
+    protection_mask: np.ndarray,
+    depth_map: np.ndarray,
+) -> tuple:
 
-    # 1. ДИНАМИЧЕСКОЕ СГЛАЖИВАНИЕ (Spatially Varying Median Blur)
+    brush_map_px, area_map_px = calculate_dynamic_maps(
+        labels.shape, depth_map, protection_mask, config, fg_mask
+    )
+
     labels_uint8 = labels.astype(np.uint8)
+    smoothed_labels = labels_uint8.copy()
 
-    k_bg = max(3, brush_px["background"] if brush_px["background"] % 2 != 0 else brush_px["background"] + 1)
-    k_fg = max(3, brush_px["foreground"] if brush_px["foreground"] % 2 != 0 else brush_px["foreground"] + 1)
-    k_face = max(3, brush_px["face"] if brush_px["face"] % 2 != 0 else brush_px["face"] + 1)
+    unique_brushes = np.unique(brush_map_px)
+    for k in unique_brushes:
+        blurred = cv2.medianBlur(labels_uint8, int(k))
+        smoothed_labels[brush_map_px == k] = blurred[brush_map_px == k]
 
-    blur_bg = cv2.medianBlur(labels_uint8, k_bg)
-    blur_fg = cv2.medianBlur(labels_uint8, k_fg)
-    blur_face = cv2.medianBlur(labels_uint8, k_face)
-
-    # Собираем "Слоеный пирог" сглаживания
-    smoothed_labels = blur_bg.copy()
-    smoothed_labels[fg_mask == 255] = blur_fg[fg_mask == 255]
-    smoothed_labels[protection_mask == 255] = blur_face[protection_mask == 255]
-
-    # 2. ДИНАМИЧЕСКОЕ УДАЛЕНИЕ ПЫЛИНОК
-    final_labels = remove_small_regions(smoothed_labels, brush_px, area_px, palette, config, fg_mask, protection_mask)
+    final_labels = remove_small_regions(
+        smoothed_labels, brush_map_px, area_map_px, palette, config, fg_mask, protection_mask
+    )
 
     h, w = final_labels.shape
     final_image_rgb = palette[final_labels.flatten()].reshape((h, w, 3))

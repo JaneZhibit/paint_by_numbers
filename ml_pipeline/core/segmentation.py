@@ -3,6 +3,9 @@ import numpy as np
 import logging
 from PIL import Image
 
+import ml_pipeline.hf_offline  # noqa: F401
+from ml_pipeline.hf_offline import create_hf_pipeline
+
 logger = logging.getLogger("PaintByNumbers")
 
 
@@ -18,11 +21,10 @@ class HybridSegmenter:
         logger.info(f" -> Background (Semantic): {bg_model_name}")
 
         from ultralytics import YOLO
-        from transformers import pipeline
 
         # Грузим обе модели
         self.fg_model = YOLO(fg_model_name)
-        self.bg_model = pipeline("image-segmentation", model=bg_model_name)
+        self.bg_model = create_hf_pipeline("image-segmentation", bg_model_name, config=config)
 
     def get_hybrid_masks(self, image: np.ndarray) -> list:
         """

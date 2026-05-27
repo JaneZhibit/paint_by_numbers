@@ -7,21 +7,25 @@ def get_default_config():
             "debug_mode": True
         },
         "preprocessing": {
-            "clip_limit": 1.5,
+            "clip_limit": 1.9,
             "tile_grid_size": (8, 8)
         },
         "ml_models": {
+            "router_model": "openai/clip-vit-base-patch32",  # дирижер
             "foreground_model": "yolo11x-seg.pt",
             "background_model": "openmmlab/upernet-convnext-base", # или base/large
             "pose_model": "yolo11s-pose.pt",  # <--- Модель для поиска лиц
+            "depth_model": "depth-anything/Depth-Anything-V2-Small-hf",
+            "use_depth": True,
+            "local_files_only": True,  # Только локальный кэш HF (~/.cache/huggingface), без VPN
             "confidence_threshold": 0.25
         },
          "quantization": {
-            "auto_colors": True,         # Включить автоподбор
-            "fg_threshold": 0.02,        # 2% порог для объектов (будет много цветов)
-            "bg_threshold": 0.06,        # 6% порог для фона (будет мало цветов)
-            "total_colors": 32,          # Лимит (если сумма превысит, мы их урежем пропорционально)
-            "foreground_colors": 12,     # Используется как fallback, если auto_colors = False
+            "auto_colors": True,
+            "fg_threshold": 0.02,
+            "bg_threshold": 0.02,
+            "total_colors": 62,
+            "foreground_colors": 12,
             "background_colors": 4,
             "color_space": "lab",
             "params": {
@@ -35,14 +39,15 @@ def get_default_config():
         "postprocessing": {
             "contrast_threshold": 60.0,
             "merge_strategy": "color_weighted",
-            "grow_high_contrast": True,
+            "grow_high_contrast": False,
             # --- Пространственная морфология ---
+            "use_depth_morphology": True,
             "brush_sizes_mm": {
-                "background": 3.5,       # Крупная кисть для фона
-                "foreground": 2.5,       # Средняя кисть для объектов/животных
-                "face_keypoints": 1.0    # Микро-кисть для глаз/носов
+                "background": 3,      # Фон (глубокий план, крупная кисть)
+                "foreground": 1,      # Объекты (жесткий приоритет fg_mask)
+                "face_keypoints": 1.0   # Лица/глаза (абсолютный приоритет protection_mask)
             },
-            "face_protection_radius_px": 20 # Радиус защиты вокруг найденных глаз
+            "face_protection_radius_px": 20
         },
         "vectorization": {
             "scale_factor": 4,          # Во сколько раз увеличиваем холст. 4 удобно, т.к. каждого пикселя теперь 4
